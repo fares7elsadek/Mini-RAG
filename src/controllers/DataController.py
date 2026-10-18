@@ -1,18 +1,19 @@
 from .BaseController import BaseController
 from fastapi import UploadFile
 from models import ResponseSignal
-from controllers import ProjectController
+from controllers.ProjectController import ProjectController
 import os
+import re
 
 class DataController(BaseController):
 
-    def __int__(self):
-        super().__int__()
+    def __init__(self):
+        super().__init__()
         self.size_scale = 1024 * 1024
 
     
     def validate_uploaded_file(self,file: UploadFile):
-
+        
         # file type
         if file.content_type not in self.app_settings.FILE_ALLOWED_TYPES:
             return False, ResponseSignal.FILE_TYPE_NOT_SUPPORTED.value
@@ -44,4 +45,8 @@ class DataController(BaseController):
                 random_file_name + "_" + self.remove_special_characters(filename)
             )
 
-        return final_file_path
+        return final_file_path, random_file_name + "_" + self.remove_special_characters(filename)
+
+
+    def remove_special_characters(self, text: str):
+            return re.sub(r'[^a-zA-Z0-9_.]', '', text)
