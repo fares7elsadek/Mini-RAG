@@ -2,7 +2,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from pymongo import AsyncMongoClient
+from motor.motor_asyncio import AsyncIOMotorClient
 
 from routes import base, data
 from helper.config import get_settings, Settings
@@ -12,7 +12,7 @@ from helper.config import get_settings, Settings
 async def lifespan(app: FastAPI):
     settings: Settings = get_settings()
 
-    client = AsyncMongoClient(settings.MONGODB_URL)
+    client = AsyncIOMotorClient(settings.MONGODB_CONNECTION_STRING)
 
     try:
         # Verify MongoDB is reachable
