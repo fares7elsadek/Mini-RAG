@@ -1,9 +1,15 @@
-from .BaseController import BaseController
-from fastapi import UploadFile
-from models import ResponseSignal
-from controllers.ProjectController import ProjectController
+import logging
 import os
 import re
+
+from fastapi import UploadFile
+
+from .BaseController import BaseController
+from controllers.ProjectController import ProjectController
+from models import ResponseSignal
+
+logger = logging.getLogger(__name__)
+
 
 class DataController(BaseController):
 
@@ -11,42 +17,47 @@ class DataController(BaseController):
         super().__init__()
         self.size_scale = 1024 * 1024
 
-    
-    def validate_uploaded_file(self,file: UploadFile):
-        
+    def validate_uploaded_file(self, file: UploadFile) -> tuple[bool, str]:
+        """Validate file type, extension, and size against app settings."""
+
         # file type
         if file.content_type not in self.app_settings.FILE_ALLOWED_TYPES:
             return False, ResponseSignal.FILE_TYPE_NOT_SUPPORTED.value
 
-        # file extension
-        if file.filename.split('.')[-1] not in self.app_settings.FILE_ALLOWED_EXTENSIONS:
+        # file extension – guard against filenames without an extension
+        filename = file.filename or ""
+        if "." not in filename:
+            return False, ResponseSignal.FILE_TYPE_NOT_SUPPORTED.value
+
+        if filename.rsplit(".", 1)[-1].lower() not in self.app_settings.FILE_ALLOWED_EXTENSIONS:
             return False, ResponseSignal.FILE_TYPE_NOT_SUPPORTED.value
 
         # file size
-        if file.size > self.app_settings.FILE_MAX_SIZE_IN_MB * self.size_scale:
+        if file.size is not None and file.size > self.app_settings.FILE_MAX_SIZE_IN_MB * self.size_scale:
             return False, ResponseSignal.FILE_SIZE_EXCEEDED.value
 
-        return True, ResponseSignal.FILE_VLAIDATED_SUCCESSFULLY.value
+        return True, ResponseSignal.FILE_VALIDATED_SUCCESSFULLY.value
 
-    def get_unique_file_name(self,filename: str, project_id: str):
+    def get_unique_file_name(self, filename: str, project_id: str) -> tuple[str, str]:
+        """Return (full_path, file_id) with a collision-free random prefix."""
+
+        # Sanitize project_id before using in path
+        safe_project_id = self.sanitize_path_component(project_id)
+        project_path = ProjectController.get_project_path(project_id=safe_project_id)
 
         random_file_name = self.generate_random_string()
-        project_path = ProjectController().get_project_path(project_id=project_id)
+        clean_filename = self._remove_special_characters(filename)
+        file_id = f"{random_file_name}_{clean_filename}"
 
-        final_file_path = os.path.join(
-            project_path,
-            random_file_name + "_" + self.remove_special_characters(filename)
-        )
+        final_file_path = os.path.join(project_path, file_id)
 
         while os.path.exists(final_file_path):
             random_file_name = self.generate_random_string()
-            final_file_path = os.path.join(
-                project_path,
-                random_file_name + "_" + self.remove_special_characters(filename)
-            )
+            file_id = f"{random_file_name}_{clean_filename}"
+            final_file_path = os.path.join(project_path, file_id)
 
-        return final_file_path, random_file_name + "_" + self.remove_special_characters(filename)
+        return final_file_path, file_id
 
-
-    def remove_special_characters(self, text: str):
-            return re.sub(r'[^a-zA-Z0-9_.]', '', text)
+    @staticmethod
+    def _remove_special_characters(text: str) -> str:
+        return re.sub(r'[^a-zA-Z0-9_.]', '', text)
