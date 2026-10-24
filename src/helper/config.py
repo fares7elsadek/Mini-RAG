@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     FILE_ALLOWED_EXTENSIONS: list
     FILE_DEFAULT_CHUNK_SIZE: int
     MONGODB_CONNECTION_STRING: str
-
+    MONGODB_DATABASE_NAME:str
 
     class Config:
         env_file = ".env"

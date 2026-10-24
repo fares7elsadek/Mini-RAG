@@ -31,7 +31,7 @@ class DataController(BaseController):
     def get_unique_file_name(self,filename: str, project_id: str):
 
         random_file_name = self.generate_random_string()
-        project_path = ProjectController().get_project_path(project_id=project_id)
+        project_path = ProjectController.get_project_path(project_id=project_id)
 
         final_file_path = os.path.join(
             project_path,

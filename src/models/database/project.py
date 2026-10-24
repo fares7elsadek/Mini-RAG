@@ -1,18 +1,24 @@
-from pydantic import BaseModel,field_validator
-from typing import Optional
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from bson import ObjectId
 
+
 class Project(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    _id: Optional[ObjectId]
-    project_id: str
+    _id: ObjectId | None = None
 
-    @field_validator("project_id")
+    project_name: str = Field(
+        min_length=3,
+        max_length=100,
+    )
+    project_id: int
+
+    @field_validator("project_name")
     @classmethod
-    def validate_name(cls, value: str) -> str:
-        if not value.isalnum():
-            raise ValueError("'project_id' must be alphanumric.")
-        return value
+    def validate_project_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Project name cannot be empty or whitespace.")
 
-    class Config:
-        arbitrary_types_allowed = True
+        return value.strip()
+
+   

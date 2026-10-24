@@ -1,8 +1,9 @@
-from fastapi import APIRouter,Depends,UploadFile,status
+from fastapi import APIRouter,Depends,UploadFile,status,Request,HTTPException
 from fastapi.responses import JSONResponse
 import os
 from helper.config import get_settings , Settings
 from controllers import DataController,ProcessController
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from controllers import ProjectController
 import aiofiles
 from models import ResponseSignal
@@ -14,10 +15,30 @@ data_router = APIRouter(
     tags=["api_v1"]
 )
 
+
+def get_project_controller(request: Request) -> ProjectController:
+    db_client: AsyncIOMotorDatabase = request.app.state.mongodb
+    return ProjectController(db_client=db_client)
+
+
+
 @data_router.post("/upload/{project_id}")
-async def upload_data(project_id: str, file: UploadFile,
+async def upload_data(request: Request,project_id: str, file: UploadFile,
                      settings: Settings = Depends(get_settings)):
 
+    # check project existence
+    project_controller = get_project_controller(request=request)
+    project = await project_controller.get_project(
+                project_id=int(project_id)
+            )
+    
+    if project is None:
+                return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={
+                                "signal": "Project not found"
+                            }
+                        )
 
     # validate the file properties
     data_controller = DataController()
@@ -58,9 +79,22 @@ async def upload_data(project_id: str, file: UploadFile,
 
 
 @data_router.post("/process/{project_id}")
-async def process_data(project_id: str, process_request: ProcessRequest):
+async def process_data(request: Request,project_id: str, process_request: ProcessRequest):
 
     try:
+
+        # check project existence
+        project_controller = get_project_controller(request=request)
+        project = await project_controller.get_project(project_id=int(project_id))
+        if project is None:
+            return JSONResponse(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        content={
+                            "signal": "Project not found"
+                        }
+                    )
+
+
         file_id = process_request.file_id
         chunk_size = process_request.chunk_size
         overlap_size = process_request.overlap_size

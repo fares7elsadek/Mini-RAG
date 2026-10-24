@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from routes import base, data
+from routes import base, data, project
 from helper.config import get_settings, Settings
 
 
@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI):
         await client.admin.command("ping")
 
         app.state.mongo_client = client
-        app.state.mongodb = client.get_default_database()
+        app.state.mongodb = client.get_database(settings.MONGODB_DATABASE_NAME)
 
         yield
 
@@ -31,3 +31,4 @@ app = FastAPI(lifespan=lifespan)
 
 app.include_router(base.base_router)
 app.include_router(data.data_router)
+app.include_router(project.project_router)
