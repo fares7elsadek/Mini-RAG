@@ -4,3 +4,4 @@ class DataBaseEnum(Enum):
 
     PROJECT_COLLECTION = "projects"
     CHUNK_COLLECTION = "chunks"
+    DOCUMENT_COLLECTION = "documents"

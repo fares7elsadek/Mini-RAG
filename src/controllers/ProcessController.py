@@ -5,6 +5,8 @@ from langchain_community.document_loaders import TextLoader
 from langchain_community.document_loaders import PyMuPDFLoader
 from models import ProcessingEnum
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from models.database import Document
+from fastapi import HTTPException
 
 class ProcessController(BaseController):
 
@@ -13,16 +15,21 @@ class ProcessController(BaseController):
         super().__init__()
         self.project_id = project_id
         self.project_path = ProjectController.get_project_path(project_id=project_id)
+        
+
 
     def get_file_extension(self, file_id:str):
         return os.path.splitext(file_id)[-1]
 
-    def get_file_loader(self, file_id: str):
-        ext = self.get_file_extension(file_id=file_id)
-        file_path = os.path.join(
-            self.project_path,
-            file_id
-        )
+    def get_file_loader(self, file: Document):
+
+        document: Document = file
+
+        if document is None:
+            raise HTTPException(401, f"Document with id {file_id} not found.")
+
+        ext = self.get_file_extension(file_id=document.document_name)
+        file_path = document.document_path
 
         match ext:
             case ProcessingEnum.PDF.value:
@@ -33,8 +40,8 @@ class ProcessController(BaseController):
                 return None
 
 
-    def get_file_content(self, file_id: str):
-        loader = self.get_file_loader(file_id=file_id)
+    def get_file_content(self, file: Document):
+        loader = self.get_file_loader(file=file)
         return loader.load()
 
 

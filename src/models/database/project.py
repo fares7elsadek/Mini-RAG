@@ -3,9 +3,13 @@ from bson import ObjectId
 
 
 class Project(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        populate_by_name=True,
+        json_encoders={ObjectId: str},
+    )
 
-    _id: ObjectId | None = None
+    id: ObjectId | None = Field(default=None, alias="_id")
 
     project_name: str = Field(
         min_length=3,
