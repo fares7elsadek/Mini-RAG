@@ -1,13 +1,29 @@
 services:
   mongodb:
     image: mongo:8
-    container_name: mongodb
+    container_name: mini-rag-mongodb
     restart: unless-stopped
     ports:
       - "27017:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: password
+    entrypoint:
+      - bash
+      - -c
+      - |
+        openssl rand -base64 128 > /data/replica.key
+        chmod 400 /data/replica.key
+        chown mongodb:mongodb /data/replica.key
+        exec docker-entrypoint.sh mongod --replSet rs0 --bind_ip_all --keyFile /data/replica.key
+    healthcheck:
+      test: >
+        mongosh -u admin -p password --authenticationDatabase admin --quiet --eval
+        "try { rs.status().ok } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}).ok }"
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
     volumes:
       - mongodb_data:/data/db
     networks:

@@ -4,7 +4,7 @@ import os
 from langchain_community.document_loaders import TextLoader
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-
+from models.enums.DataBaseEnum import DocumentTypeEnum
 from .BaseController import BaseController
 from .ProjectController import ProjectController
 from models import ProcessingEnum
@@ -23,6 +23,27 @@ class ProcessController(BaseController):
 
     def get_file_extension(self, file_id: str) -> str:
         return os.path.splitext(file_id)[-1]
+
+    def get_file_type(self, file_id: str) -> DocumentTypeEnum:
+        """Return the file type based on the file extension."""
+        ext = self.get_file_extension(file_id=file_id).lower()
+
+        match ext:
+            case ".pdf":
+                return DocumentTypeEnum.PDF
+            case ".txt":
+                return DocumentTypeEnum.TXT
+            case _:
+                raise FileProcessingException(
+                    f"Unsupported file type: '{ext}'. "
+                    f"Supported types: {[e.value for e in DocumentTypeEnum]}"
+                )
+
+    def get_file_size(self, file_path: str) -> int:
+        """Return the size of the file in bytes."""
+        if not os.path.exists(file_path):
+            raise NotFoundException("File", file_path)
+        return os.path.getsize(file_path)
 
     def get_file_loader(self, file: Document):
         """Return the appropriate LangChain document loader for the file type.
