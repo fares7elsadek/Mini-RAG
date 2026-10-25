@@ -7,12 +7,15 @@ import aiofiles
 
 from helper.config import get_settings, Settings
 from controllers import DataController, ProcessController
-from core.dependencies import get_project_controller, get_document_model, get_datachunk_model
+from core.dependencies import get_project_controller, get_document_model, get_datachunk_model, get_process_controller
 from core.exceptions import NotFoundException, ValidationException, AppException
 from controllers import ProjectController
 from models import ResponseSignal, DataChunkModel, DocumentModel
 from .schemas.data import ProcessRequest
 from models.database import Document, DataChunk
+from datetime import datetime, timezone
+from motor.motor_asyncio import AsyncIOMotorClientSession
+from pymongo.errors import PyMongoError
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +32,7 @@ async def upload_data(
     file: UploadFile,
     settings: Settings = Depends(get_settings),
     project_controller: ProjectController = Depends(get_project_controller),
-    document_model: DocumentModel = Depends(get_document_model),
+    document_model: DocumentModel = Depends(get_document_model)
 ):
     # check project existence
     project = await project_controller.get_project(project_id=project_id)
@@ -59,10 +62,16 @@ async def upload_data(
             message=ResponseSignal.FILE_UPLOADED_FAILED.value,
         )
 
+    process_controller = ProcessController(project_id=str(project.project_id))
+
     document = Document(
         project_id=project.id,
         document_name=file_id,
         document_path=file_path,
+        document_type=process_controller.get_file_type(file_id=file_id),
+        document_size=process_controller.get_file_size(file_path=file_path),
+        uploaded_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
     result_document = await document_model.create_document(document=document)
 
@@ -126,10 +135,42 @@ async def process_data(
         for i, chunk in enumerate(file_chunks)
     ]
 
-    no_records = await datachunk_model.insert_many_chunks(chunks=chunks)
-    await document_model.process_document(document_id=document.id)
+    client = request.app.state.mongo_client
 
-    return {
-        "signal": ResponseSignal.FILE_PROCESSING_SUCCESSFUL.value,
-        "number_of_chunks": no_records,
-    }
+    async def transaction(session: AsyncIOMotorClientSession):
+        no_records = await datachunk_model.insert_many_chunks(
+            chunks=chunks,
+            session=session,
+        )
+
+        await document_model.process_document(
+            document_id=document.id,
+            session=session,
+        )
+
+        return no_records
+
+    try:
+        async with await client.start_session() as session:
+            no_records = await session.with_transaction(
+                transaction
+            )
+
+        if no_records > 0:
+            deleted = DataController._remove_file(document.document_path)
+            if not deleted:
+                logger.exception("Document not deleted (%s)", document.document_path)
+
+        return {
+            "signal": ResponseSignal.FILE_PROCESSING_SUCCESSFUL.value,
+            "number_of_chunks": no_records,
+        }
+
+    except PyMongoError:
+        logger.exception("Transaction failed while processing document %s", file_id)
+        raise AppException(
+            status_code=500,
+            message=ResponseSignal.FILE_PROCESSING_FAILED.value
+        )
+
+    

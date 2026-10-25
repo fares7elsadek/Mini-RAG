@@ -37,7 +37,7 @@ class ProjectController(BaseController):
             project_id=project_id,
         )
 
-    async def delete_project(self, project_id: int) -> bool:
+    async def delete_project(self, project_id: str) -> bool:
         return await self.project_model.delete_project(
             project_id=project_id,
         )

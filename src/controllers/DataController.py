@@ -56,8 +56,19 @@ class DataController(BaseController):
             file_id = f"{random_file_name}_{clean_filename}"
             final_file_path = os.path.join(project_path, file_id)
 
-        return final_file_path, file_id
+        return final_file_path, file_id 
 
     @staticmethod
     def _remove_special_characters(text: str) -> str:
         return re.sub(r'[^a-zA-Z0-9_.]', '', text)
+
+    @staticmethod
+    def _remove_file(file_path: str) -> bool:
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                return True
+            return False
+        except OSError:
+            logger.exception("Failed to delete file: %s", file_path)
+            return False

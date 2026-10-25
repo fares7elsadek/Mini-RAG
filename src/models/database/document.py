@@ -1,6 +1,8 @@
 
+from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 from bson import ObjectId
+from models.enums.DataBaseEnum import DocumentTypeEnum
 
 
 class Document(BaseModel):
@@ -14,4 +16,8 @@ class Document(BaseModel):
     project_id: ObjectId
     document_name: str
     document_path: str
+    document_type: DocumentTypeEnum 
+    document_size: int
+    uploaded_at: datetime
+    updated_at: datetime
     is_processed_to_chunks: bool = False

@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from routes import base, data, project
+from routes import base, data, project, document
 from helper.config import get_settings, Settings
 from core.exceptions import AppException, app_exception_handler
 from core.logging_config import setup_logging
@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI):
 
         app.state.mongo_client = client
         app.state.mongodb = client.get_database(settings.MONGODB_DATABASE_NAME)
+        
 
         # Ensure indexes exist (idempotent — safe to call on every startup)
         await _ensure_indexes(app.state.mongodb)
@@ -68,7 +69,7 @@ app.add_exception_handler(AppException, app_exception_handler)
 app.include_router(base.base_router)
 app.include_router(data.data_router)
 app.include_router(project.project_router)
-
+app.include_router(document.document_router)
 
 
 @app.get("/health", tags=["Health"])
