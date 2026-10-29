@@ -12,6 +12,16 @@ class Settings(BaseSettings):
     FILE_DEFAULT_CHUNK_SIZE: int
     MONGODB_CONNECTION_STRING: str
     MONGODB_DATABASE_NAME: str
+    GENERATION_BACKEND:str
+    EMBEDDING_BACKEND:str
+    OPENAI_KEY:str = None
+    OPENAI_URL:str = None
+    GENERATION_MODEL_ID:str = None
+    EMBEDDING_MODEL_ID:str = None
+    EMBEDDING_MODEL_SIZE:str = None
+    INPUT_DEFAULT_MAX_TOKENS:int = None
+    GENERATE_DEFAULT_MAX_TOKENS:int = None
+    GENERATE_DEFAULT_TEMPERATURE:int = None
 
     model_config = SettingsConfigDict(env_file=".env")
 

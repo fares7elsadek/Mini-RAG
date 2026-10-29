@@ -9,6 +9,9 @@ from routes import base, data, project, document
 from helper.config import get_settings, Settings
 from core.exceptions import AppException, app_exception_handler
 from core.logging_config import setup_logging
+from stores.llm.LLMFactory import LLMFactory
+from stores.llm.LLMInterface import LLMInterface
+from stores.llm.LLMEnum import LLMEnums
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +35,15 @@ async def lifespan(app: FastAPI):
 
         # Ensure indexes exist (idempotent — safe to call on every startup)
         await _ensure_indexes(app.state.mongodb)
+
+        # LLM setup
+        llm_factory = LLMFactory()
+        app.generation_model = llm_factory.create(provider= settings.GENERATION_BACKEND)
+        app.generation_model.set_generation_model(model_id=settings.GENERATION_MODEL_ID)
+
+        app.embedding_model = llm_factory.create(provider= settings.EMBEDDING_BACKEND)
+        app.embedding_model.set_embedding_model(model_id=settings.EMBEDDING_MODEL_ID,
+                                                embedding_size=settings.EMBEDDING_MODEL_SIZE)
 
         yield
 
