@@ -22,7 +22,10 @@ class Settings(BaseSettings):
     INPUT_DEFAULT_MAX_TOKENS:int = None
     GENERATE_DEFAULT_MAX_TOKENS:int = None
     GENERATE_DEFAULT_TEMPERATURE:int = None
-
+    VEC_DB_PATH:str
+    VEC_DB_DISTANCE_METHOD:str
+    VEC_DB_BACKEND:str
+    
     model_config = SettingsConfigDict(env_file=".env")
 
 
