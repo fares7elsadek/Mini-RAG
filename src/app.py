@@ -49,12 +49,15 @@ async def lifespan(app: FastAPI):
         app.vectordb_client = vectordb_factory.create(
             provider=settings.VEC_DB_BACKEND
         )
+        app.vectordb_client.connect()
 
         yield
 
     finally:
         logger.info("Shutting down — closing MongoDB connection.")
         client.close()
+        logger.info("Shutting down — closing VectorDB connection.")
+        app.vectordb_client.disconnect()
 
 
 async def _ensure_indexes(db) -> None:
