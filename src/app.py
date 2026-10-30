@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from routes import base, data, project, document
+from routes import base, data, project, document,nlp
 from helper.config import get_settings, Settings
 from core.exceptions import AppException, app_exception_handler
 from core.logging_config import setup_logging
@@ -90,6 +90,7 @@ app.include_router(base.base_router)
 app.include_router(data.data_router)
 app.include_router(project.project_router)
 app.include_router(document.document_router)
+app.include_router(nlp.nlp_router)
 
 
 @app.get("/health", tags=["Health"])

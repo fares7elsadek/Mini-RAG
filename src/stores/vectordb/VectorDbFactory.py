@@ -1,4 +1,4 @@
-from providers import QDrantDbProvider
+from .providers import QDrantDbProvider
 from helper.config import get_settings, Settings
 from .VectorDBEnum import VectorDbEnums, DistanceMethodEnums
 from .VectorDbInterface import VectorDbInterface

@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_SIZE:int = None
     INPUT_DEFAULT_MAX_TOKENS:int = None
     GENERATE_DEFAULT_MAX_TOKENS:int = None
-    GENERATE_DEFAULT_TEMPERATURE:int = None
+    GENERATE_DEFAULT_TEMPERATURE:float = None
     VEC_DB_PATH:str
     VEC_DB_DISTANCE_METHOD:str
     VEC_DB_BACKEND:str
