@@ -10,8 +10,7 @@ from helper.config import get_settings, Settings
 from core.exceptions import AppException, app_exception_handler
 from core.logging_config import setup_logging
 from stores.llm.LLMFactory import LLMFactory
-from stores.llm.LLMInterface import LLMInterface
-from stores.llm.LLMEnum import LLMEnums
+from stores.vectordb.VectorDbFactory import VectorDbFactory
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +43,12 @@ async def lifespan(app: FastAPI):
         app.embedding_model = llm_factory.create(provider= settings.EMBEDDING_BACKEND)
         app.embedding_model.set_embedding_model(model_id=settings.EMBEDDING_MODEL_ID,
                                                 embedding_size=settings.EMBEDDING_MODEL_SIZE)
+
+        # VectorDB setup
+        vectordb_factory = VectorDbFactory()
+        app.vectordb_client = vectordb_factory.create(
+            provider=settings.VEC_DB_BACKEND
+        )
 
         yield
 
