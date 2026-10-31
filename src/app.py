@@ -5,13 +5,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from routes import base, data, project, document
+from routes import base, data, project, document,nlp
 from helper.config import get_settings, Settings
 from core.exceptions import AppException, app_exception_handler
 from core.logging_config import setup_logging
 from stores.llm.LLMFactory import LLMFactory
-from stores.llm.LLMInterface import LLMInterface
-from stores.llm.LLMEnum import LLMEnums
+from stores.vectordb.VectorDbFactory import VectorDbFactory
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +44,20 @@ async def lifespan(app: FastAPI):
         app.embedding_model.set_embedding_model(model_id=settings.EMBEDDING_MODEL_ID,
                                                 embedding_size=settings.EMBEDDING_MODEL_SIZE)
 
+        # VectorDB setup
+        vectordb_factory = VectorDbFactory()
+        app.vectordb_client = vectordb_factory.create(
+            provider=settings.VEC_DB_BACKEND
+        )
+        app.vectordb_client.connect()
+
         yield
 
     finally:
         logger.info("Shutting down — closing MongoDB connection.")
         client.close()
+        logger.info("Shutting down — closing VectorDB connection.")
+        app.vectordb_client.disconnect()
 
 
 async def _ensure_indexes(db) -> None:
@@ -82,6 +90,7 @@ app.include_router(base.base_router)
 app.include_router(data.data_router)
 app.include_router(project.project_router)
 app.include_router(document.document_router)
+app.include_router(nlp.nlp_router)
 
 
 @app.get("/health", tags=["Health"])

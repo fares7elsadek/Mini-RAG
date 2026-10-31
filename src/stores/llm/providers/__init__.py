@@ -1,1 +1,2 @@
-from providers.OpenAIProvider import OpenAiProvider
+from .OpenAIProvider import OpenAiProvider
+from .GeminiProvider import GeminiProvider

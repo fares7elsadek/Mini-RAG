@@ -18,14 +18,16 @@ class Settings(BaseSettings):
     OPENAI_URL:str = None
     GENERATION_MODEL_ID:str = None
     EMBEDDING_MODEL_ID:str = None
-    EMBEDDING_MODEL_SIZE:str = None
+    EMBEDDING_MODEL_SIZE:int = None
     INPUT_DEFAULT_MAX_TOKENS:int = None
     GENERATE_DEFAULT_MAX_TOKENS:int = None
-    GENERATE_DEFAULT_TEMPERATURE:int = None
+    GENERATE_DEFAULT_TEMPERATURE:float = None
     VEC_DB_PATH:str
     VEC_DB_DISTANCE_METHOD:str
     VEC_DB_BACKEND:str
-    
+    GEMINI_API_KEY:str
+
+
     model_config = SettingsConfigDict(env_file=".env")
 
 
