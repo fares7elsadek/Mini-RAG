@@ -11,6 +11,7 @@ class NLPController(BaseController):
 
     def __init__(self, vector_db_client: VectorDbInterface,
                  llm_embedding_model_client: LLMInterface,
+                 llm_generation_model_client: LLMInterface,
                  data_chunk_model: DataChunkModel,
                  project_id:int):
 
@@ -18,6 +19,32 @@ class NLPController(BaseController):
         self.llm_embedding_model_client = llm_embedding_model_client
         self.data_chunk_model = data_chunk_model
         self.project_id = project_id
+        self.llm_generation_model_client = llm_generation_model_client
+        self.RAG_PROMPT = """
+            You are an AI assistant that answers questions based on the provided context.
+
+            Your task is to answer the user's question using ONLY the information
+            available in the provided context.
+
+            ### Instructions:
+            1. Carefully read all provided context chunks.
+            2. Answer the question using relevant information from the context.
+            3. Do not use external knowledge or make assumptions.
+            4. If the context does not contain enough information to answer,
+            explicitly say that you don't have enough information.
+            5. If multiple context chunks contain relevant information, combine
+            them into a clear and coherent answer.
+            6. Do not invent facts, numbers, names, or details.
+            7. Keep your answer clear, accurate, and concise.
+
+            ### Context:
+            {context}
+
+            ### User Question:
+            {question}
+
+            ### Answer:
+        """
 
 
     def get_collection_name(self) -> str:
@@ -83,3 +110,47 @@ class NLPController(BaseController):
         )
 
         return result
+
+    def build_rag_prompt(
+        self,
+        chunks: list[str],
+        question: str
+    ) -> str:
+
+        if not chunks:
+            return None
+
+        context = "\n\n".join(
+            f"[Chunk {index + 1}]\n{chunk}"
+            for index, chunk in enumerate(chunks)
+        )
+
+        prompt = self.RAG_PROMPT.format(
+            context=context,
+            question=question
+        )
+
+        return prompt
+
+    def get_llm_answer(self, user_prompt: str) -> str:
+
+        retrieved_documents = self.search_in_vectordb(
+            txt= user_prompt,
+            limit=5
+        )
+
+        chunks = [
+            doc.text
+            for doc in retrieved_documents
+        ]
+
+        final_prompt = self.build_rag_prompt(
+            chunks=chunks,
+            question=user_prompt
+        )
+
+        llm_answer = self.llm_generation_model_client.generate_txt(
+            prompt=final_prompt
+        )
+
+        return llm_answer

@@ -4,7 +4,7 @@ from core.exceptions import NotFoundException,AppException
 from models import ResponseSignal
 from core.dependencies import get_project_model,get_document_model,get_nlp_controller
 from models import ProjectModel,DocumentModel
-from .schemas.nlp import SearchRequest
+from .schemas.nlp import SearchRequest,QuestionRequest
 from controllers import NLPController
 
 
@@ -84,7 +84,7 @@ async def indxe_project(
     
 
 @nlp_router.post("/search/{project_id}")
-async def search_in_vectordb(
+async def question_llm(
     project_id: int,
     search_request: SearchRequest,
     project_model: ProjectModel = Depends(get_project_model),
@@ -127,5 +127,46 @@ async def search_in_vectordb(
             message=ResponseSignal.PROJECT_SEARCH_FAILED.value
         )
     
+@nlp_router.post("/prompt/{project_id}")
+async def prompt_llm(
+    project_id: int,
+    question_request: QuestionRequest,
+    project_model: ProjectModel = Depends(get_project_model),
+    nlp_controller: NLPController = Depends(get_nlp_controller)
+):
 
+    # check if the project exist
+    project = await project_model.get_project(project_id=project_id)
+    if project is None:
+        raise NotFoundException("Project", project_id)
+
+    if not project.is_indexed:
+        raise AppException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message= ResponseSignal.PROJECT_IS_NOT_INDEXED.value
+        )
+    
+    try:
+    
+        result = nlp_controller.get_llm_answer(
+            user_prompt=question_request.prompt
+        )
+
+        if not result:
+            raise AppException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                message=ResponseSignal.PROMPT_GENERATION_FAILED.value
+            )
+
+        return {
+            "signal": ResponseSignal.PROMPT_GENERATION_SUCCESS.value,
+            "content": result,
+        }
+            
+
+    except Exception as e:
+        raise AppException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=ResponseSignal.PROMPT_GENERATION_FAILED.value
+        )
 

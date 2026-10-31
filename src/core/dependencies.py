@@ -18,12 +18,17 @@ def get_embedding_llm_model(request: Request) -> LLMInterface:
     """Return the Embedding LLM Model instance attached during lifespan."""
     return request.app.embedding_model
 
+def get_generation_llm_model(request: Request) -> LLMInterface:
+    """Return the Generation LLM Model instance attached during lifespan."""
+    return request.app.generation_model
+
 def get_project_controller(request: Request) -> ProjectController:
     return ProjectController(db_client=get_db(request))
 
 def get_nlp_controller(request: Request, project_id:int) -> ProjectController:
     return NLPController(vector_db_client=get_vecdb(request),
                          llm_embedding_model_client=get_embedding_llm_model(request),
+                         llm_generation_model_client=get_generation_llm_model(request),
                          data_chunk_model=get_datachunk_model(request),project_id=project_id)
 
 
