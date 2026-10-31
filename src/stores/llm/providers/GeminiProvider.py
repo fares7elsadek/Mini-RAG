@@ -63,30 +63,35 @@ class GeminiProvider(LLMInterface):
             else self.default_generation_temperature
         )
 
-        if chat_history is None:
-            chat_history = []
+        
+        contents = list(chat_history) if chat_history else []
 
-        chat_history.append(
+        contents.append(
             self.construct_prompt(
                 prompt=prompt,
                 role=GeminiEnums.USER.value
             )
         )
 
-        response = self.client.models.generate_content(
-            model=self.generation_model_id,
-            contents=chat_history,
-            config=types.GenerateContentConfig(
-                max_output_tokens=max_output_tokens,
-                temperature=temp
+        try:
+            response = self.client.models.generate_content(
+                model=self.generation_model_id,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    max_output_tokens=max_output_tokens,
+                    temperature=temp
+                )
             )
-        )
 
-        if not response or not response.text:
-            self.logger.error("Error while generating text with Gemini.")
+            if not response or not response.text:
+                self.logger.error("Error while generating text with Gemini.")
+                return None
+
+            return response.text
+
+        except Exception:
+            self.logger.exception("Gemini text generation failed.")
             return None
-
-        return response.text
 
 
     def embed_txt(self, txt:str, document_type: DocumentTypeEnum = None):
@@ -114,10 +119,12 @@ class GeminiProvider(LLMInterface):
         return response.embeddings[0].values
 
     def construct_prompt(self, prompt:str, role:str):
-        return {
-            "role": role,
-            "content": self.process_txt(txt=prompt)
-        }
+        return types.Content(
+            role=role,
+            parts=[
+                types.Part.from_text(text=prompt)
+            ]
+        )
 
     def process_txt(self,txt: str):
         return txt[:self.default_input_max_tokens].strip()

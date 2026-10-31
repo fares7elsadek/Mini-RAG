@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List
+from .dtos.RetrievedDocument import RetrievedDocument
 
 class VectorDbInterface(ABC):
 
@@ -58,5 +59,5 @@ class VectorDbInterface(ABC):
             collection_name: str,
             vector: list[float],
             limit: int = 5
-        ):
+        ) -> list[RetrievedDocument]:
         pass

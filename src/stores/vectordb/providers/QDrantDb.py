@@ -3,6 +3,7 @@ from typing import List
 import logging
 from ..VectorDBEnum import DistanceMethodEnums
 from qdrant_client import QdrantClient, models
+from ..dtos.RetrievedDocument import RetrievedDocument
 from uuid import uuid4
 
 class QDrantDbProvider(VectorDbInterface):
@@ -156,7 +157,7 @@ class QDrantDbProvider(VectorDbInterface):
         collection_name: str,
         vector: list[float],
         limit: int = 5
-    ):
+    ) -> list[RetrievedDocument]:
         if not self.is_collection_existed(collection_name=collection_name):
             self.logger.error("Collection does not exist.")
             return False
@@ -170,12 +171,10 @@ class QDrantDbProvider(VectorDbInterface):
         )
 
         return [
-            {
-                "id": point.id,
-                "score": point.score,
-                "text": point.payload.get("text"),
-                "metadata": point.payload.get("metadata", {})
-            }
+            RetrievedDocument(
+                text=point.payload.get("text"),
+                score=point.score
+            )
             for point in results.points
         ]
 
