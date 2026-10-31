@@ -8,7 +8,7 @@ from .BaseDataModel import BaseDataModel
 from models.enums.DataBaseEnum import DataBaseEnum
 from .database.project import Project
 from bson import ObjectId
-
+from datetime import datetime, timezone
 
 
 class ProjectModel(BaseDataModel):
@@ -92,3 +92,14 @@ class ProjectModel(BaseDataModel):
             projects.append(Project(**document))
 
         return projects, total_pages
+
+    async def index_project(self, project_id: str):
+        if not ObjectId.is_valid(project_id):
+            return False
+
+        result = await self.collection.update_one(
+            {"_id": ObjectId(project_id)},
+            {"$set": {"is_indexed": True , "updated_at": datetime.now(timezone.utc)}}
+        )
+        
+        return result.matched_count > 0

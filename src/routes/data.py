@@ -7,7 +7,7 @@ import aiofiles
 
 from helper.config import get_settings, Settings
 from controllers import DataController, ProcessController
-from core.dependencies import get_project_controller, get_document_model, get_datachunk_model, get_process_controller
+from core.dependencies import get_project_controller, get_document_model, get_datachunk_model
 from core.exceptions import NotFoundException, ValidationException, AppException
 from controllers import ProjectController
 from models import ResponseSignal, DataChunkModel, DocumentModel

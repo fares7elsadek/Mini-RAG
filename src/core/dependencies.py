@@ -1,7 +1,7 @@
 from fastapi import Request
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from stores.vectordb.VectorDbInterface import VectorDbInterface
-from controllers import ProcessController, ProjectController
+from controllers import ProcessController, ProjectController, NLPController
 from models import DocumentModel, DataChunkModel, ProjectModel
 from stores.llm.LLMInterface import LLMInterface
 
@@ -20,6 +20,11 @@ def get_embedding_llm_model(request: Request) -> LLMInterface:
 
 def get_project_controller(request: Request) -> ProjectController:
     return ProjectController(db_client=get_db(request))
+
+def get_nlp_controller(request: Request, project_id:int) -> ProjectController:
+    return NLPController(vector_db_client=get_vecdb(request),
+                         llm_embedding_model_client=get_embedding_llm_model(request),
+                         data_chunk_model=get_datachunk_model(request),project_id=project_id)
 
 
 def get_document_model(request: Request) -> DocumentModel:

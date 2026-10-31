@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from bson import ObjectId
+from datetime import datetime
 
 
 class Project(BaseModel):
@@ -16,6 +17,8 @@ class Project(BaseModel):
         max_length=100,
     )
     project_id: int
+    is_indexed: bool = Field(default=False)
+    updated_at: datetime | None = None
 
     @field_validator("project_name")
     @classmethod

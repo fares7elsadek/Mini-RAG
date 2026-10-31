@@ -1,18 +1,13 @@
 import logging
-from typing import Annotated
 from bson import ObjectId
-from fastapi import APIRouter, Depends, Query,Request,status
+from fastapi import APIRouter, Depends,status
 from fastapi.encoders import jsonable_encoder
 from core.exceptions import NotFoundException,AppException
 from models import ResponseSignal
-from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo.errors import PyMongoError
-from core.dependencies import get_project_model,get_document_model,get_vecdb,get_datachunk_model,get_embedding_llm_model
-from helper.config import get_settings,Settings
-from stores.vectordb.VectorDbInterface import VectorDbInterface
-from stores.llm.LLMInterface import LLMInterface
-from models import ProjectModel,DocumentModel,DataChunkModel
+from core.dependencies import get_project_model,get_document_model,get_nlp_controller
+from models import ProjectModel,DocumentModel
 from models.database.data_chunk import DataChunk
+from controllers import NLPController
 
 
 
@@ -23,35 +18,31 @@ nlp_router = APIRouter(
     tags=["NLP"],
 )
 
-vectordb_collection_name = "minirag"
-
-def serialize(data):
-    return jsonable_encoder(
-        data,
-        custom_encoder={ObjectId: str},
-    )
-
-@nlp_router.post("/index/{projectId}")
+@nlp_router.post("/index/{project_Id}")
 async def indxe_project(
-    projectId:int,
+    project_id: int,
     project_model: ProjectModel = Depends(get_project_model),
     document_model: DocumentModel = Depends(get_document_model),
-    vector_db_client: VectorDbInterface = Depends(get_vecdb),
-    data_chunk_model: DataChunkModel = Depends(get_datachunk_model),
-    embedding_llm_model: LLMInterface = Depends(get_embedding_llm_model),
-    settings: Settings = Depends(get_settings)
+    nlp_controller: NLPController = Depends(get_nlp_controller),
 ):
 
     # check if the project exist
-    project = await project_model.get_project(project_id=projectId)
+    project = await project_model.get_project(project_id=project_id)
     if project is None:
-        raise NotFoundException("Project", projectId)
+        raise NotFoundException("Project", project_id)
+
+    # check if the project indexed before
+    if project.is_indexed:
+        raise AppException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message= ResponseSignal.PROJECT_INDEXED_BEFORE.value
+        )
 
     # get project documents 
     documents = await document_model.get_documents_by_project(project_id=project.id)
 
     if documents is None or len(documents) == 0:
-        raise AppException(status.HTTP_400_BAD_REQUEST,f"There's no documents for project id : {projectId}")
+        raise AppException(status.HTTP_400_BAD_REQUEST,f"There's no documents for project id : {project_id}")
 
     processed_documents = [
         doc
@@ -60,50 +51,37 @@ async def indxe_project(
     ]
 
     if len(processed_documents) == 0:
-        raise AppException(status.HTTP_400_BAD_REQUEST,f"There's no processed documents for project id : {projectId}")
-
-    
+        raise AppException(status.HTTP_400_BAD_REQUEST,f"There's no processed documents for project id : {project_id}")
 
     try:
 
-        if not vector_db_client.is_collection_existed(vectordb_collection_name):
-                vector_db_client.create_collection(collection_name=vectordb_collection_name
-                                                   ,embedding_size=settings.EMBEDDING_MODEL_SIZE)
+        _ = nlp_controller.ensure_collection_creation()
 
-        for doc in documents:
-            chunks: list[DataChunk] = await data_chunk_model.get_chunks_by_document_id(document_id=doc.id)
-            if len(chunks) == 0:
-                continue
-    
-    
-            texts = [
-                chunk.chunk_txt
-                for chunk in chunks
-            ]
-    
-            metadata = [
-                chunk.chunk_metadata
-                for chunk in chunks
-            ]
-    
-            vectors = [
-                embedding_llm_model.embed_txt(txt=txt)
-                for txt in texts
-            ]
-    
-            vector_db_client.insert_many(vectordb_collection_name,texts,vectors,metadata)
+        success, no_documents , no_chunks = await nlp_controller.index_project_documents(
+            documents=documents
+        )
+
+        if success:
+           matched = await project_model.index_project(project_id=project.id)
+           if not matched:
+               raise AppException(
+                   status.HTTP_400_BAD_REQUEST,
+                   ResponseSignal.PROJECT_INDEX_FAILED.value
+               )
 
         return {
-            "signal": "Project indexed",
-            "indexed": True,
-            "no_documents": len(documents)
-         }
+            "signal": ResponseSignal.PROJECT_CREATION_SUCCESS,
+            "indexed": success,
+            "no_documents": no_documents,
+            "no_chunks": no_chunks
+        }
             
 
     except Exception as e:
+        print(e)
         raise AppException(
-            status_code=500,
-            message="Failed to index project"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=ResponseSignal.PROJECT_INDEX_FAILED.value
         )
     
     
