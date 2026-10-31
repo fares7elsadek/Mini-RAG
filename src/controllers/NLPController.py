@@ -61,4 +61,25 @@ class NLPController(BaseController):
         return True, len(documents), len(chunks)
 
     
-        
+    def search_in_vectordb(self, txt: str, limit: int):
+
+        # get collection name
+        self.ensure_collection_creation()
+        collection_name = self.get_collection_name()
+
+        # get embedding
+        vector = self.llm_embedding_model_client.embed_txt(
+            txt=txt
+        )
+
+        if len(vector) == 0:
+            return False
+
+        # search
+        result = self.vector_db_client.search_by_vector(
+            collection_name=collection_name,
+            vector=vector,
+            limit=limit
+        )
+
+        return result
