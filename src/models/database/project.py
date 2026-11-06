@@ -1,31 +1,25 @@
-from pydantic import BaseModel, Field, field_validator, ConfigDict
-from bson import ObjectId
-from datetime import datetime
+from .Base import Base
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Integer,String,DateTime,Boolean
+from datetime import UTC, datetime
+from .document import Document
+from .data_chunk import DataChunk
 
 
-class Project(BaseModel):
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        populate_by_name=True,
-        json_encoders={ObjectId: str},
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    project_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    project_id:  Mapped[int] = mapped_column(Integer,nullable=False)
+    is_indexed: Mapped[bool] = mapped_column(Boolean,nullable=False,default=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default= lambda: datetime.now(UTC)
     )
 
-    id: ObjectId | None = Field(default=None, alias="_id")
-
-    project_name: str = Field(
-        min_length=3,
-        max_length=100,
-    )
-    project_id: int
-    is_indexed: bool = Field(default=False)
-    updated_at: datetime | None = None
-
-    @field_validator("project_name")
-    @classmethod
-    def validate_project_name(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("Project name cannot be empty or whitespace.")
-
-        return value.strip()
+    documents: Mapped[Document] = relationship(back_populates="project")
+    chunks: Mapped[DataChunk] = relationship(back_populates="project")
 
    

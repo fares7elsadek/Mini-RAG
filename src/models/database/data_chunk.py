@@ -1,17 +1,29 @@
-from pydantic import BaseModel, Field, ConfigDict
+from .Base import Base
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Any
-from bson import ObjectId
+from sqlalchemy import ForeignKey, Integer, Text, JSON
+from .project import Project
+from .document import Document
 
-class DataChunk(BaseModel):
-    id: ObjectId | None = Field(default=None, alias="_id")
-    chunk_txt: str
-    chunk_metadata: dict[str, Any]
-    chunk_order: int
-    chunk_project_id: ObjectId
-    chunk_document_id: ObjectId
+class DataChunk(Base):
+    __tablename__ = "data_chunks"
 
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        populate_by_name=True,
-        json_encoders={ObjectId: str},
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    chunk_txt: Mapped[str] = mapped_column(Text,nullable=False)
+    chunk_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable= True)
+    chunk_order: Mapped[int] = mapped_column(Integer)
+
+
+    chunk_project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id"),
+        nullable=False,
+        index=True
     )
+    chunk_document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id"),
+        nullable=False,
+        index=True
+    )
+
+    project: Mapped[Project] = relationship(back_populates="chunks")
+    document: Mapped[Document] = relationship(back_populates="chunks")

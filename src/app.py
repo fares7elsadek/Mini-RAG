@@ -3,8 +3,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from routes import base, data, project, document,nlp
 from helper.config import get_settings, Settings
 from core.exceptions import AppException, app_exception_handler
@@ -18,23 +18,18 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
-
     settings: Settings = get_settings()
 
-    client = AsyncIOMotorClient(settings.MONGODB_CONNECTION_STRING)
+   
 
     try:
-        # Verify MongoDB is reachable
-        await client.admin.command("ping")
-        logger.info("Connected to MongoDB successfully.")
+       
+        engine = create_engine(
+            settings.SQLALCHEMY_DATABASE_CONNECTION
+        )
 
-        app.state.mongo_client = client
-        app.state.mongodb = client.get_database(settings.MONGODB_DATABASE_NAME)
+        app.sessiondb_local = sessionmaker(autoflush=False,bind=engine,autocommit=False)
         
-
-        # Ensure indexes exist (idempotent — safe to call on every startup)
-        await _ensure_indexes(app.state.mongodb)
-
         # LLM setup
         llm_factory = LLMFactory()
         app.generation_model = llm_factory.create(provider= settings.GENERATION_BACKEND)
@@ -54,17 +49,12 @@ async def lifespan(app: FastAPI):
         yield
 
     finally:
-        logger.info("Shutting down — closing MongoDB connection.")
-        client.close()
+        
         logger.info("Shutting down — closing VectorDB connection.")
         app.vectordb_client.disconnect()
 
 
-async def _ensure_indexes(db) -> None:
-    await db["projects"].create_index("project_id", unique=True)
-    await db["documents"].create_index("project_id")
-    await db["chunks"].create_index("chunk_document_id")
-    logger.info("MongoDB indexes ensured.")
+
 
 
 app = FastAPI(

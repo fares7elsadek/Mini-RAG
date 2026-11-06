@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     VEC_DB_DISTANCE_METHOD:str
     VEC_DB_BACKEND:str
     GEMINI_API_KEY:str
+    SQLALCHEMY_DATABASE_CONNECTION:str
 
 
     model_config = SettingsConfigDict(env_file=".env")

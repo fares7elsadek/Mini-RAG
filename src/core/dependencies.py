@@ -1,14 +1,16 @@
 from fastapi import Request
-from motor.motor_asyncio import AsyncIOMotorDatabase
 from stores.vectordb.VectorDbInterface import VectorDbInterface
 from controllers import ProcessController, ProjectController, NLPController
 from models import DocumentModel, DataChunkModel, ProjectModel
 from stores.llm.LLMInterface import LLMInterface
+from sqlalchemy.orm import Session
 
 
-def get_db(request: Request) -> AsyncIOMotorDatabase:
-    """Return the MongoDB database instance attached during lifespan."""
-    return request.app.state.mongodb
+def get_db(request: Request):
+    """Return the DB database instance attached during lifespan."""
+    with request.app.sessiondb_local() as db:
+        yield db
+
 
 def get_vecdb(request: Request) -> VectorDbInterface:
     """Return the VectorDb database instance attached during lifespan."""
