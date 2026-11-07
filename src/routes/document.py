@@ -4,7 +4,7 @@ from typing import Annotated
 from bson import ObjectId
 from fastapi import APIRouter, Depends, Query,Request
 from fastapi.encoders import jsonable_encoder
-from core.dependencies import get_document_model, get_datachunk_model
+from core.dependencies import get_document_model, get_datachunk_model,get_db
 from core.exceptions import NotFoundException,AppException
 from models import ResponseSignal
 from models import DocumentModel,DataChunkModel
