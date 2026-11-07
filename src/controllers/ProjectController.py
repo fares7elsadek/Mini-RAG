@@ -3,7 +3,7 @@ import os
 
 from .BaseController import BaseController
 from models import ProjectModel
-from motor.motor_asyncio import AsyncIOMotorDatabase
+from sqlalchemy.ext.asyncio import AsyncSession
 from models.database.project import Project
 from models.schemas.schemas import ProjectCreate,ProjectResponse
 
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class ProjectController(BaseController):
 
-    def __init__(self, db_client: AsyncIOMotorDatabase):
+    def __init__(self, db_client: AsyncSession):
         super().__init__()
         self.project_model = ProjectModel(db_client=db_client)
 

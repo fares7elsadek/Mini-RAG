@@ -1,13 +1,13 @@
 from .BaseDataModel import BaseDataModel
-from schemas.schemas import DataChunkCreate,DataChunkResponse
+from models.schemas.schemas import DataChunkCreate,DataChunkResponse
 from sqlalchemy import select, delete
-from sqlalchemy.orm import Session
-from database.data_chunk import DataChunk
+from sqlalchemy.ext.asyncio import AsyncSession
+from models.database.data_chunk import DataChunk
 
 
 class DataChunkModel(BaseDataModel):
 
-    def __init__(self, db_client: Session):
+    def __init__(self, db_client: AsyncSession):
         super().__init__(db_client)
 
        

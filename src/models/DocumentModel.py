@@ -1,9 +1,9 @@
 from .BaseDataModel import BaseDataModel
 
-from schemas.schemas import DocumentResponse, DocumentCreate
+from models.schemas.schemas import DocumentResponse, DocumentCreate
 from models.database.document import Document
 from datetime import datetime, UTC
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select,delete,update,Result, func
 import math
 
@@ -12,7 +12,7 @@ import math
 
 class DocumentModel(BaseDataModel):
 
-    def __init__(self, db_client: Session):
+    def __init__(self, db_client: AsyncSession):
         super().__init__(db_client)
 
 

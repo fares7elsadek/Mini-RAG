@@ -1,15 +1,15 @@
 from .BaseDataModel import BaseDataModel
-from schemas.schemas import ProjectCreate, ProjectResponse
-from .database.project import Project
+from models.schemas.schemas import ProjectCreate, ProjectResponse
+from models.database.project import Project
 from datetime import datetime, UTC
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select,delete,update,func
 import math
 
 
 class ProjectModel(BaseDataModel):
 
-    def __init__(self, db_client: Session):
+    def __init__(self, db_client: AsyncSession):
         super().__init__(db_client)
 
    

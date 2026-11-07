@@ -47,7 +47,7 @@ async def upload_data(
     # save file
     file_path, file_id = data_controller.get_unique_file_name(
         filename=file.filename,
-        project_id=str(project.project_id),
+        project_id=str(project.id),
     )
 
     try:
@@ -61,7 +61,7 @@ async def upload_data(
             message=ResponseSignal.FILE_UPLOADED_FAILED.value,
         )
 
-    process_controller = ProcessController(project_id=str(project.project_id))
+    process_controller = ProcessController(project_id=str(project.id))
 
     document = DocumentCreate(
         project_id=project.id,
@@ -121,7 +121,7 @@ async def process_data(
 
     # 3. Process document content
     process_obj = ProcessController(
-        project_id=str(project.project_id)
+        project_id=str(project.id)
     )
 
     content = process_obj.get_file_content(file=document)
@@ -153,17 +153,15 @@ async def process_data(
 
     try:
         # 5. Execute all database operations atomically
-        async with db_client.begin():
+        no_records = await datachunk_model.insert_many_chunks(
+            chunks=chunks
+        )
 
-            no_records = await datachunk_model.insert_many_chunks(
-                chunks=chunks
-            )
+        await document_model.process_document(
+            document_id=document.id
+        )
 
-            await document_model.process_document(
-                document_id=document.id
-            )
-
-        # Transaction committed successfully here.
+        # Transaction is committed by get_db dependency on success.
 
         return {
             "signal": ResponseSignal.FILE_PROCESSING_SUCCESSFUL.value,

@@ -78,38 +78,33 @@ async def delete_project(
     project_model: ProjectModel = Depends(get_project_model),
     document_model: DocumentModel = Depends(get_document_model),
     datachunk_model: DataChunkModel = Depends(get_datachunk_model),
-    db_client: AsyncSession = Depends(get_db)
 ):
 
     try:
-        async with db_client.begin():
+        # Get documents before deleting them
+        documents = await document_model.get_documents_by_project(
+            project_id=project_id
+        )
 
-            # Get documents before deleting them
-            documents = await document_model.get_documents_by_project(
-                project_id=project_id
-            )
+        # 1. Delete chunks first (foreign key dependency)
+        no_chunks = await datachunk_model.delete_chunks_by_project_id(
+            project_id=project_id
+        )
 
-            # 1. Delete chunks first (foreign key dependency)
-            no_chunks = await datachunk_model.delete_chunks_by_project_id(
-                project_id=project_id
-            )
+        # 2. Delete documents
+        no_documents = await document_model.delete_documents_by_project(
+            project_id=project_id
+        )
 
-            # 2. Delete documents
-            no_documents = await document_model.delete_documents_by_project(
-                project_id=project_id
-            )
+        # 3. Delete project
+        deleted = await project_model.delete_project(
+            project_id=project_id
+        )
 
-            # 3. Delete project
-            deleted = await project_model.delete_project(
-                project_id=project_id
-            )
+        if not deleted:
+            raise NotFoundException("Project", project_id)
 
-            if not deleted:
-                raise NotFoundException("Project", project_id)
-
-        
-
-        # 4. Delete physical files AFTER commit
+        # 4. Delete physical files AFTER commit (commit handled by get_db)
         for document in documents:
             try:
                 document_deleted = DataController._remove_file(
