@@ -11,6 +11,7 @@ from core.exceptions import AppException, app_exception_handler
 from core.logging_config import setup_logging
 from stores.llm.LLMFactory import LLMFactory
 from stores.vectordb.VectorDbFactory import VectorDbFactory
+from models.database.Base import Base
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +24,17 @@ async def lifespan(app: FastAPI):
    
 
     try:
-       
+
+        # Database setup
         engine = create_engine(
             settings.SQLALCHEMY_DATABASE_CONNECTION
         )
 
         app.sessiondb_local = sessionmaker(autoflush=False,bind=engine,autocommit=False)
+
+        # Idempotent
+        Base.metadata.create_all(bind=engine)
+
         
         # LLM setup
         llm_factory = LLMFactory()

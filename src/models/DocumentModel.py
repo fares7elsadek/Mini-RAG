@@ -1,110 +1,118 @@
 from .BaseDataModel import BaseDataModel
-from motor.motor_asyncio import (
-    AsyncIOMotorDatabase,
-    AsyncIOMotorCollection,
-    AsyncIOMotorClientSession
-)
-from models.enums.DataBaseEnum import DataBaseEnum
+
+from schemas.schemas import DocumentResponse, DocumentCreate
 from models.database.document import Document
-from bson import ObjectId
-from datetime import datetime, timezone
+from datetime import datetime, UTC
+from sqlalchemy.orm import Session
+from sqlalchemy import select,delete,update,Result, func
+import math
 
 
 
 
 class DocumentModel(BaseDataModel):
 
-    def __init__(self, db_client: AsyncIOMotorDatabase):
+    def __init__(self, db_client: Session):
         super().__init__(db_client)
-        self.collection: AsyncIOMotorCollection  = self.db_client[DataBaseEnum.DOCUMENT_COLLECTION.value]
 
 
-    async def create_document(self, document: Document, session: AsyncIOMotorClientSession | None = None) -> Document:
+    async def create_document(self, document: DocumentCreate) -> DocumentResponse:
 
-        document_dict = document.model_dump(by_alias=True, exclude_none=True)
-        document_dict["document_type"] = document.document_type.value
-        result = await self.collection.insert_one(document_dict, session=session)
-        document_id = result.inserted_id
-        document.id = document_id
-        return document
-
-    async def get_document(self, document_id:str, session: AsyncIOMotorClientSession | None = None) -> Document | None:
-        if not ObjectId.is_valid(document_id):
-            return None
+        new_document = Document(**document.model_dump())
+        self.db_client.add(new_document)
+        await self.db_client.flush()
+        await self.db_client.refresh(new_document)
         
-        document = await self.collection.find_one({
-            "_id":ObjectId(document_id)
-        }, session=session)
+        return DocumentResponse.model_validate(new_document)
+
+    async def get_document(self, document_id: int) -> DocumentResponse | None:
+        stmt = select(Document).where(Document.id == document_id)
+        result: Result = await self.db_client.execute(stmt)
+
+        document = result.scalar_one_or_none()
 
         if document is None:
             return None
 
-        return Document(**document)
+        return DocumentResponse.model_validate(document)
 
 
-    async def process_document(self, document_id: str, session: AsyncIOMotorClientSession | None = None) -> bool:
-        if not ObjectId.is_valid(document_id):
-            return False
+    async def process_document(
+        self,
+        document_id: int
+    ) -> bool:
 
-        result = await self.collection.update_one(
-            {"_id": ObjectId(document_id)},
-            {"$set": {"is_processed_to_chunks": True , "updated_at": datetime.now(timezone.utc)}},
-            session=session
+        stmt = (
+            update(Document)
+            .where(Document.id == document_id)
+            .values(is_processed_to_chunks=True,updated_at= datetime.now(UTC))
         )
 
-        return result.matched_count > 0
+        result = await self.db_client.execute(stmt)
 
-    async def delete_document(self, document_id: str, session: AsyncIOMotorClientSession | None = None) -> bool:
-        if not ObjectId.is_valid(document_id):
-            return False
+        return result.rowcount > 0
 
-        result = await self.collection.delete_one(
-            {"_id": ObjectId(document_id)},
-            session=session
-        )
+    async def delete_document(self, document_id: str) -> bool:
+        stmt = delete(Document).where(Document.id == document_id)
 
-        return result.deleted_count > 0 
+        result = await self.db_client.execute(stmt)
 
-    async def get_documents_by_project(self, project_id: str, session: AsyncIOMotorClientSession | None = None) -> list[Document]:
-        if not ObjectId.is_valid(project_id):
-            return []
+        return result.rowcount > 0
 
-        documents_cursor = self.collection.find(
-            {"project_id": ObjectId(project_id)},
-            session=session
-        )
+    async def get_documents_by_project(self, project_id: str) -> list[DocumentResponse]:
+        stmt = select(Document).where(Document.project_id == project_id)
 
-        documents = []
-        async for document in documents_cursor:
-            documents.append(Document(**document))
+        result: Result = await self.db_client.execute(stmt)
 
-        return documents
+        documents = result.scalars().all()
 
-    async def get_all_documents(self, page: int = 1, size: int = 10, session: AsyncIOMotorClientSession | None = None) -> tuple[list[Document], int]:
-        total_documents = await self.collection.count_documents({}, session=session)
+        return [
+            DocumentResponse.model_validate(document)
+            for document in documents
+        ]
 
-        total_pages = (total_documents + size - 1) // size
+    async def get_all_documents(
+        self,
+        page: int = 1,
+        size: int = 10
+    ) -> tuple[list[DocumentResponse], int]:
 
-        cursor = (
-            self.collection.find()
-            .skip((page - 1) * size)
+        if page < 1 or size < 1:
+            raise ValueError("Page and size must be greater than zero")
+
+        # 1. Get total documents count
+        count_stmt = select(func.count()).select_from(Document)
+
+        total_documents = await self.db_client.scalar(count_stmt)
+
+        # 2. Calculate total pages
+        total_pages = math.ceil(total_documents / size) if total_documents else 0
+
+        # 3. Fetch paginated documents
+        offset = (page - 1) * size
+
+        stmt = (
+             select(Document)
+            .order_by(Document.updated_at.desc())
+            .offset(offset)
             .limit(size)
         )
 
-        documents: list[Document] = []
+        result = await self.db_client.execute(stmt)
 
-        async for document in cursor:
-            documents.append(Document(**document))
+        documents = result.scalars().all()
 
-        return documents, total_pages
+        # 4. Convert ORM objects to Pydantic schemas
+        response = [
+            DocumentResponse.model_validate(document)
+            for document in documents
+        ]
 
-    async def delete_documents_by_project(self, project_id: str, session: AsyncIOMotorClientSession | None = None) -> int:
-        if not ObjectId.is_valid(project_id):
-            return 0
+        return response, total_pages
 
-        result = await self.collection.delete_many(
-            {"project_id": ObjectId(project_id)},
-            session=session
-        )
-
-        return result.deleted_count
+    async def delete_documents_by_project(self, project_id: int) -> int:
+        stmt = delete(Document).where(Document.project_id == project_id)
+        
+        result = await self.db_client.execute(stmt)
+        
+        return result.rowcount > 0

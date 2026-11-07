@@ -12,7 +12,6 @@ class Project(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 
     project_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    project_id:  Mapped[int] = mapped_column(Integer,nullable=False)
     is_indexed: Mapped[bool] = mapped_column(Boolean,nullable=False,default=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

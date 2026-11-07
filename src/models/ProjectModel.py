@@ -1,105 +1,94 @@
-from motor.motor_asyncio import (
-    AsyncIOMotorDatabase,
-    AsyncIOMotorCollection,
-    AsyncIOMotorClientSession
-)
-
 from .BaseDataModel import BaseDataModel
-from models.enums.DataBaseEnum import DataBaseEnum
+from schemas.schemas import ProjectCreate, ProjectResponse
 from .database.project import Project
-from bson import ObjectId
-from datetime import datetime, timezone
+from datetime import datetime, UTC
+from sqlalchemy.orm import Session
+from sqlalchemy import select,delete,update,func
+import math
 
 
 class ProjectModel(BaseDataModel):
 
-    def __init__(self, db_client: AsyncIOMotorDatabase):
+    def __init__(self, db_client: Session):
         super().__init__(db_client)
 
-        self.collection: AsyncIOMotorCollection = (
-            self.db_client[DataBaseEnum.PROJECT_COLLECTION.value]
-        )
-
    
-    async def create_project(self, project_name: str, session: AsyncIOMotorClientSession | None = None) -> Project:
-        largest_project = await self.collection.find_one(
-            sort=[("project_id", -1)]
-        )
+    async def create_project(self, project: ProjectCreate) -> ProjectResponse:
+        new_project = Project(**project.model_dump())
 
-        next_project_id = (
-            largest_project["project_id"] + 1
-            if largest_project is not None
-            else 1
-        )
+        self.db_client.add(new_project)
 
-        project = Project(
-            project_name=project_name,
-            project_id=next_project_id
-        )
+        await self.db_client.flush()
+        await self.db_client.refresh(new_project)
 
-        result = await self.collection.insert_one(
-            project.model_dump(by_alias=True, exclude={"id"})
-        )
-
-        project._id = result.inserted_id
-
-        return project
+        return ProjectResponse.model_validate(new_project)
 
 
 
-    async def get_project(self, project_id: int, session: AsyncIOMotorClientSession | None = None) -> Project | None:
-        project = await self.collection.find_one({
-            "project_id":project_id
-        }, session=session)
+    async def get_project(self, project_id: int) -> ProjectResponse | None:
+        stmt = select(Project).where(Project.id == project_id)
+
+        result = await self.db_client.execute(stmt)
+
+        project = result.scalar_one_or_none()
 
         if project is None:
             return None
 
-        return Project(**project)
+        return ProjectResponse.model_validate(project)
 
 
-    async def delete_project(self, project_id: str, session: AsyncIOMotorClientSession | None = None) -> bool:
+    async def delete_project(self, project_id: int) -> bool:
+        stmt = delete(Project).where(Project.id == project_id)
 
-        if not ObjectId.is_valid(project_id):
-            return False
-
+        result = await self.db_client.execute(stmt)
         
-        result = await self.collection.delete_one({
-            "_id": ObjectId(project_id) 
-        }, session=session)
-        
-
-        return result.deleted_count > 0
+        return result.rowcount > 0
 
 
     async def get_all_projects(
-        self, page: int = 1, size: int = 10, session: AsyncIOMotorClientSession | None = None
-    ) -> tuple[list[Project], int]:
+        self, page: int = 1, size: int = 10,
+    ) -> tuple[list[ProjectResponse], int]:
 
-        total_documents = await self.collection.count_documents({}, session=session)
+        if page < 1 or size < 1:
+            raise ValueError("Page and size must be greater than zero")
 
-        total_pages = (total_documents + size - 1) // size
+        count_stmt = select(func.count()).select_from(Project)
 
-        cursor = (
-            self.collection.find()
-            .skip((page - 1) * size)
+        total_projects = await self.db_client.scalar(count_stmt)
+
+        # 2. Calculate total pages
+        total_pages = math.ceil(total_projects / size) if total_projects else 0
+
+        # 3. Fetch paginated documents
+        offset = (page - 1) * size
+
+        stmt = (
+             select(Project)
+            .order_by(Project.updated_at.desc())
+            .offset(offset)
             .limit(size)
         )
 
-        projects: list[Project] = []
+        result = await self.db_client.execute(stmt)
 
-        async for document in cursor:
-            projects.append(Project(**document))
+        projects = result.scalars().all()
 
-        return projects, total_pages
+        # 4. Convert ORM objects to Pydantic schemas
+        response = [
+            ProjectResponse.model_validate(project)
+            for project in projects
+        ]
 
-    async def index_project(self, project_id: str):
-        if not ObjectId.is_valid(project_id):
-            return False
-
-        result = await self.collection.update_one(
-            {"_id": ObjectId(project_id)},
-            {"$set": {"is_indexed": True , "updated_at": datetime.now(timezone.utc)}}
+        return response, total_pages
+    
+    async def index_project(self, project_id: int):
+        stmt = (
+             update(Project)
+            .where(Project.id == project_id)
+            .values(is_indexed=True,updated_at= datetime.now(UTC))
         )
         
-        return result.matched_count > 0
+        result = await self.db_client.execute(stmt)
+
+        return result.rowcount > 0
