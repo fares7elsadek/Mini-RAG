@@ -5,6 +5,7 @@ from .BaseController import BaseController
 from models import ProjectModel
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from models.database.project import Project
+from models.schemas.schemas import ProjectCreate,ProjectResponse
 
 logger = logging.getLogger(__name__)
 
@@ -27,24 +28,24 @@ class ProjectController(BaseController):
         os.makedirs(project_dir, exist_ok=True)
         return project_dir
 
-    async def create_project(self, project_name: str) -> Project:
+    async def create_project(self, project: ProjectCreate) -> ProjectResponse:
         return await self.project_model.create_project(
-            project_name=project_name,
+            project=project
         )
 
-    async def get_project(self, project_id: int) -> Project | None:
+    async def get_project(self, project_id: int) -> ProjectResponse | None:
         return await self.project_model.get_project(
             project_id=project_id,
         )
 
-    async def delete_project(self, project_id: str) -> bool:
+    async def delete_project(self, project_id: int) -> bool:
         return await self.project_model.delete_project(
             project_id=project_id,
         )
 
     async def get_all_projects(
         self, page: int = 1, size: int = 10,
-    ) -> tuple[list[Project], int]:
+    ) -> tuple[list[ProjectResponse], int]:
         return await self.project_model.get_all_projects(
             page=page,
             size=size,

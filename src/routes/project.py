@@ -3,16 +3,18 @@ from typing import Annotated
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, Query, Request, status
-from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, StringConstraints
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from controllers import ProjectController, DataController
-from core.dependencies import get_project_controller,get_document_model,get_datachunk_model, get_project_model
+from core.dependencies import get_project_controller,get_document_model,get_datachunk_model, get_project_model,get_db
 from core.exceptions import NotFoundException, AppException
 from models import ResponseSignal
 from models import ProjectModel,DocumentModel, DataChunkModel
-from pymongo.errors import PyMongoError
+from models.schemas.schemas import ProjectCreate,ProjectResponse
+from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
+
 
 logger = logging.getLogger(__name__)
 
@@ -22,43 +24,22 @@ project_router = APIRouter(
 )
 
 
-ProjectName = Annotated[
-    str,
-    StringConstraints(
-        strip_whitespace=True,
-        min_length=3,
-        max_length=100,
-    ),
-]
-
-
-class CreateProjectRequest(BaseModel):
-    project_name: ProjectName
-
-
-def serialize(data):
-    return jsonable_encoder(
-        data,
-        custom_encoder={ObjectId: str},
-    )
-
-
 @project_router.post("", status_code=status.HTTP_201_CREATED)
 async def create_project(
-    payload: CreateProjectRequest,
+    payload: ProjectCreate,
     controller: ProjectController = Depends(get_project_controller),
 ):
     project = await controller.create_project(
-        project_name=payload.project_name,
+        project=payload
     )
 
     if project is None:
         raise NotFoundException("Project", payload.project_name)
 
-    return serialize({
+    return {
         "signal": ResponseSignal.PROJECT_CREATION_SUCCESS.value,
         "project": project,
-    })
+    }
 
 
 @project_router.get("")
@@ -71,7 +52,7 @@ async def get_project(
     if project is None:
         raise NotFoundException("Project", project_id)
 
-    return serialize({"project": project})
+    return {"project": project}
 
 
 @project_router.get("/all")
@@ -85,64 +66,88 @@ async def get_all_projects(
         size=size,
     )
 
-    return serialize({
+    return {
         "projects": projects,
         "pages": total_pages,
-    })
+    }
 
 
 @project_router.delete("")
 async def delete_project(
-    request: Request,
-    project_id: str,
-    project_model:  ProjectModel = Depends(get_project_model),
+    project_id: int,
+    project_model: ProjectModel = Depends(get_project_model),
     document_model: DocumentModel = Depends(get_document_model),
     datachunk_model: DataChunkModel = Depends(get_datachunk_model),
+    db_client: AsyncSession = Depends(get_db)
 ):
-    
-    documents = await document_model.get_documents_by_project(project_id=project_id)
-    client: AsyncIOMotorClient = request.app.state.mongo_client
-    async def transaction(session):
-        # Delete all documents associated with the project
-        no_documents = await document_model.delete_documents_by_project(project_id=project_id, session=session)
-        # Delete all data chunks associated with the project
-        no_chunks = await datachunk_model.delete_chunks_by_project_id(project_id=project_id, session=session)
-        # Delete the project itself
-        deleted = await project_model.delete_project(project_id=project_id, session=session)
 
-        return deleted , no_documents , no_chunks
-    
     try:
+        async with db_client.begin():
 
-        async with await client.start_session() as session:
-            deleted , no_documents , no_chunks = await session.with_transaction(
-                transaction
+            # Get documents before deleting them
+            documents = await document_model.get_documents_by_project(
+                project_id=project_id
             )
-            
 
-        if not deleted:
-            raise NotFoundException("Project", project_id)
+            # 1. Delete chunks first (foreign key dependency)
+            no_chunks = await datachunk_model.delete_chunks_by_project_id(
+                project_id=project_id
+            )
 
+            # 2. Delete documents
+            no_documents = await document_model.delete_documents_by_project(
+                project_id=project_id
+            )
 
+            # 3. Delete project
+            deleted = await project_model.delete_project(
+                project_id=project_id
+            )
+
+            if not deleted:
+                raise NotFoundException("Project", project_id)
+
+        
+
+        # 4. Delete physical files AFTER commit
         for document in documents:
-            document_deleted = DataController._remove_file(document.document_path)
-            if not document_deleted:
-                logger.exception("Document not deleted (%s)", document.document_path)
+            try:
+                document_deleted = DataController._remove_file(
+                    document.document_path
+                )
 
+                if not document_deleted:
+                    logger.warning(
+                        "Document file could not be deleted: %s",
+                        document.document_path
+                    )
+
+            except OSError:
+                logger.exception(
+                    "Failed to delete document file: %s",
+                    document.document_path
+                )
 
         return {
-                "signal": ResponseSignal.PROJECT_DELETION_SUCCESS.value,
-                "deleted": True,
-                "no_documents": no_documents,
-                "no_chunks" : no_chunks
-            }
+            "signal": ResponseSignal.PROJECT_DELETION_SUCCESS.value,
+            "deleted": True,
+            "no_documents": no_documents,
+            "no_chunks": no_chunks
+        }
 
-    except PyMongoError:
-            logger.exception("Transaction failed while deleting project %s", project_id)
-            raise AppException(
-                status_code=500,
-                message=ResponseSignal.PROJECT_DELETION_FAILED.value
-            )
+    except NotFoundException:
+        raise
+
+    except SQLAlchemyError:
+        logger.exception(
+            "Database transaction failed while deleting project %s",
+            project_id
+        )
+
+        raise AppException(
+            status_code=500,
+            message=ResponseSignal.PROJECT_DELETION_FAILED.value
+        )
 
     
 
