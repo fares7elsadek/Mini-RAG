@@ -1,36 +1,28 @@
+
 services:
-  mongodb:
-    image: mongo:8
-    container_name: mini-rag-mongodb
+  postgres:
+    image: postgres:17
+    container_name: mini-rag-postgres
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "5432:5432"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password
-    entrypoint:
-      - bash
-      - -c
-      - |
-        openssl rand -base64 128 > /data/replica.key
-        chmod 400 /data/replica.key
-        chown mongodb:mongodb /data/replica.key
-        exec docker-entrypoint.sh mongod --replSet rs0 --bind_ip_all --keyFile /data/replica.key
-    healthcheck:
-      test: >
-        mongosh -u admin -p password --authenticationDatabase admin --quiet --eval
-        "try { rs.status().ok } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}).ok }"
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 20s
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mini_rag
     volumes:
-      - mongodb_data:/data/db
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d mini_rag"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - mini-rag-network
 
 volumes:
-  mongodb_data:
+  postgres_data:
 
 networks:
   mini-rag-network:

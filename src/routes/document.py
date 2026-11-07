@@ -4,13 +4,14 @@ from typing import Annotated
 from bson import ObjectId
 from fastapi import APIRouter, Depends, Query,Request
 from fastapi.encoders import jsonable_encoder
-from core.dependencies import get_document_model, get_datachunk_model
+from core.dependencies import get_document_model, get_datachunk_model,get_db
 from core.exceptions import NotFoundException,AppException
 from models import ResponseSignal
 from models import DocumentModel,DataChunkModel
-from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import PyMongoError
 from controllers import DataController
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 
 
 logger = logging.getLogger(__name__)
@@ -21,15 +22,10 @@ document_router = APIRouter(
 )
 
 
-def serialize(data):
-    return jsonable_encoder(
-        data,
-        custom_encoder={ObjectId: str},
-    )
 
 @document_router.get("")
 async def get_document(
-    document_id: Annotated[str, Query(...)],
+    document_id: Annotated[int, Query(...)],
     controller: DocumentModel = Depends(get_document_model),
 ):
     document = await controller.get_document(document_id=document_id)
@@ -37,7 +33,7 @@ async def get_document(
     if document is None:
         raise NotFoundException("Document", document_id)
 
-    return serialize({"document": document})
+    return {"document": document}
 
 
 @document_router.get("/all")
@@ -51,58 +47,83 @@ async def get_all_documents(
         size=size,
     )
 
-    return serialize({
+    return {
         "documents": documents,
         "pages": total_pages,
-    })
+    }
 
 
 @document_router.delete("")
 async def delete_document(
-    request: Request,
-    document_id: Annotated[str, Query(...)],
+    document_id: Annotated[int, Query(...)],
     document_model: DocumentModel = Depends(get_document_model),
-    datachunk_model: DataChunkModel = Depends(get_datachunk_model)
+    datachunk_model: DataChunkModel = Depends(get_datachunk_model),
+    db_client: AsyncSession = Depends(get_db)
 ):
 
-    document = await document_model.get_document(document_id=document_id)
+    # 1. Check document existence
+    document = await document_model.get_document(
+        document_id=document_id
+    )
+
     if document is None:
         raise NotFoundException("Document", document_id)
 
-
-    client: AsyncIOMotorClient = request.app.state.mongo_client
-    async def transaction(session):
-        no_chunks = await datachunk_model.delete_chunks_by_document_id(document_id=document_id,session=session)
-        deleted = await document_model.delete_document(document_id=document_id,session=session)
-        return deleted, no_chunks
-
     try:
+        # 2. Execute database operations atomically
+        async with db_client.begin():
 
-        async with await client.start_session() as session:
-            deleted, no_chunks = await session.with_transaction(
-                transaction
+            # Delete associated chunks first
+            no_chunks = await datachunk_model.delete_chunks_by_document_id(
+                document_id=document_id
             )
 
-        
-        if not deleted:
-            raise NotFoundException("Document", document_id)
+            # Delete document record
+            deleted = await document_model.delete_document(
+                document_id=document_id
+            )
 
-       
-        document_deleted = DataController._remove_file(document.document_path)
-        if not document_deleted:
-            logger.exception("Document not deleted (%s)", document.document_path)
+            if not deleted:
+                raise NotFoundException("Document", document_id)
+
+        # Transaction committed successfully here.
+
+        # 3. Delete physical file after successful commit
+        try:
+            document_deleted = DataController._remove_file(
+                document.document_path
+            )
+
+            if not document_deleted:
+                logger.warning(
+                    "Document file could not be deleted: %s",
+                    document.document_path
+                )
+
+        except OSError:
+            logger.exception(
+                "Failed to delete document file: %s",
+                document.document_path
+            )
 
         return {
             "signal": ResponseSignal.DOCUMENT_DELETION_SUCCESS.value,
             "deleted": True,
             "no_chunks": no_chunks
         }
-    
-    except PyMongoError:
-        logger.exception("Transaction failed while deleting document %s", document_id)
+
+    except NotFoundException:
+        raise
+
+    except SQLAlchemyError:
+        logger.exception(
+            "Transaction failed while deleting document %s",
+            document_id
+        )
+
         raise AppException(
             status_code=500,
-            message=ResponseSignal.PROJECT_DELETION_FAILED.value
+            message=ResponseSignal.DOCUMENT_DELETION_FAILED.value
         )
     
     
@@ -112,9 +133,9 @@ async def delete_document(
 
 @document_router.get("/project/{project_id}")
 async def get_document_by_projectId(
-    project_id: str,
+    project_id: int,
     controller: DocumentModel = Depends(get_document_model),
 ):
     documents = await controller.get_documents_by_project(project_id=project_id)
 
-    return serialize({"documents": documents})
+    return {"documents": documents}

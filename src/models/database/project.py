@@ -1,31 +1,50 @@
-from pydantic import BaseModel, Field, field_validator, ConfigDict
-from bson import ObjectId
-from datetime import datetime
+
+from datetime import UTC, datetime
+
+from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from .Base import Base
 
 
-class Project(BaseModel):
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        populate_by_name=True,
-        json_encoders={ObjectId: str},
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[int] = mapped_column(
+        primary_key=True,
+        index=True
     )
 
-    id: ObjectId | None = Field(default=None, alias="_id")
-
-    project_name: str = Field(
-        min_length=3,
-        max_length=100,
+    project_name: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False
     )
-    project_id: int
-    is_indexed: bool = Field(default=False)
-    updated_at: datetime | None = None
 
-    @field_validator("project_name")
-    @classmethod
-    def validate_project_name(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("Project name cannot be empty or whitespace.")
+    is_indexed: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False
+    )
 
-        return value.strip()
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False
+    )
 
-   
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False
+    )
+
+    documents: Mapped[list["Document"]] = relationship(
+        back_populates="project",
+        cascade="all, delete-orphan"
+    )
+
+    chunks: Mapped[list["DataChunk"]] = relationship(
+        back_populates="project",
+        cascade="all, delete-orphan"
+    )
